@@ -1,0 +1,129 @@
+﻿@page "/"
+@using SpendRegister.Models;
+@using SpendRegister.Services;
+
+@inject IJSRuntime JsRunTime
+@inject ISpendService SpendService 
+
+<PageTitle>Index</PageTitle>
+
+<h1>Cadastro de despesas</h1>
+
+<button class="btn btn-success btn-sm" @onclick="() => OpendModal()">Nova despesa</button>
+
+@if(TotalOfSpends > 0)
+{
+    <div class="alert alert-secondary" style="margin-top: 12px;" role="alert">
+        Total de despesas: @TotalOfSpends
+    </div>
+}
+
+@if(Spend == null)
+{
+    <p><em>Carregando...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Descrição</th>
+                <th>Valor</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach(var spend in Spends)
+            {
+                <tr>
+                    <td>@spend.Id</td>
+                    <td>@spend.Description</td>
+                    <td>@spend.Value</td>
+                    <td>
+                        <a href="#" @onclick="async () => await Delete(Spend.Id)">Deletar</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<ModelDialog @ref="@ModelDialog" Title="Criar despesa">
+    <div class="row">
+        <div class="form-group">
+            <label for="spendDescripition" class="col-form-label">Descrição:</label>
+            <input @bind-value="Spend.Description" type="text" class="form-control" id="spendDescription" />
+        </div>
+        <div class="form-group">
+            <label for="spendValue" class="col-form-label">Valor:</label>
+            <input @bind-value="Spend.Value" type="text" class="form-control" id="spendValue" />
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger" @onclick="() => ModelDialog.Close()">Cancelar</button>
+            <button type="button" class="btn btn-success" @onclick="async() => await AddSpend()">Salvar</button>
+        </div>
+    </div>
+
+</ModelDialog>
+
+@code{
+    private ModelDialog ModelDialog { get; set; }
+
+    private Spend Spend { get; set; }
+
+    private List<Spend> Spends = new();
+
+    private double TotalOfSpends => Spends.Sum(s => s.Value);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Spend = new();
+
+        Spends = await SpendService.GetSpends();
+    }
+
+    async Task Delete(Guid id)
+    {
+        bool confirmed = await JsRunTime.InvokeAsync<bool>("confirm", "Tem certeza que deseja deletar?");
+        if (confirmed is false)
+            return;
+
+        var spendToRemove = Spends.FirstOrDefault(s => s.Id == id);
+        Spends.Remove(spendToRemove);
+
+        await SpendService.SaveSpends(Spends);
+    }
+
+    async Task AddSpend()
+    {
+        if (string.IsNullOrWhiteSpace(Spend.Description))
+        {
+            await JsRunTime.InvokeAsync<bool>("Alert", "Favor preencher a descrição?");
+            return;
+        }
+
+        if (Spend.Value <= 0)
+        {
+            await JsRunTime.InvokeAsync<bool>("Alert", "O valor deve ser maior que zero?");
+            return;
+        }
+
+        Spends.Add(new Spend()
+        {
+            Id = Guid.NewGuid(),
+            Description = Spend.Description,
+            Value = Spend.Value
+        });
+
+        await SpendService.SaveSpends(Spends);
+        ModelDialog.Close();
+    }
+
+    void OpendModal()
+    {
+        Spend = new();
+        ModelDialog.Open();
+    }
+
+}
